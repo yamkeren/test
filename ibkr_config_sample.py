@@ -1,5 +1,5 @@
-# Interactive Brokers API Configuration Sample
-# Copy this file to ibkr_config.py and update with your settings
+# Interactive Brokers API Configuration
+# Copy this file and update with your settings
 
 # IB Gateway/TWS Connection Settings
 IBKR_HOST = '127.0.0.1'  # IB Gateway/TWS host
