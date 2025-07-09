@@ -226,6 +226,15 @@ class MultiSymbolDayTradingAlgo:
             # Volatility
             df['Volatility'] = df['Close'].rolling(window=10).std()
             
+            # VWAP (Volume Weighted Average Price)
+            df['VWAP'] = self.calculate_vwap(df)
+            
+            # Support and Resistance levels
+            df['Support'], df['Resistance'] = self.calculate_support_resistance(df['Close'])
+            
+            # Average True Range (ATR) for volatility-based strategies
+            df['ATR'] = self.calculate_atr(df)
+            
             # Relative strength vs market (using first symbol as proxy)
             if len(self.data) > 1:
                 first_symbol = list(self.data.keys())[0]
@@ -264,6 +273,112 @@ class MultiSymbolDayTradingAlgo:
         upper_band = sma + (std * std_dev)
         lower_band = sma - (std * std_dev)
         return upper_band, sma, lower_band
+    
+    def calculate_vwap(self, df, period=20):
+        """Calculate Volume Weighted Average Price"""
+        typical_price = (df['High'] + df['Low'] + df['Close']) / 3
+        vwap = (typical_price * df['Volume']).rolling(window=period).sum() / df['Volume'].rolling(window=period).sum()
+        return vwap
+    
+    def calculate_support_resistance(self, prices, window=20):
+        """Calculate dynamic support and resistance levels"""
+        support = prices.rolling(window=window).min()
+        resistance = prices.rolling(window=window).max()
+        return support, resistance
+    
+    def calculate_atr(self, df, period=14):
+        """Calculate Average True Range"""
+        high_low = df['High'] - df['Low']
+        high_close = np.abs(df['High'] - df['Close'].shift())
+        low_close = np.abs(df['Low'] - df['Close'].shift())
+        
+        true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+        atr = true_range.rolling(window=period).mean()
+        return atr
+    
+    def breakout_trading_strategy(self, symbol):
+        """Breakout trading strategy - buy when price crosses resistance, sell when it breaks support"""
+        df = self.data[symbol].copy()
+        signals = pd.DataFrame(index=df.index)
+        signals['signal'] = 0
+        
+        # Buy when price breaks above resistance with volume confirmation
+        breakout_up = (df['Close'] > df['Resistance'].shift(1)) & (df['Volume_ratio'] > 1.3) & (df['RSI'] < 80)
+        
+        # Sell when price breaks below support
+        breakout_down = (df['Close'] < df['Support'].shift(1)) | (df['RSI'] > 85)
+        
+        signals.loc[breakout_up, 'signal'] = 1
+        signals.loc[breakout_down, 'signal'] = -1
+        
+        return signals
+    
+    def range_trading_strategy(self, symbol):
+        """Range trading strategy - trade within a price range based on support and resistance"""
+        df = self.data[symbol].copy()
+        signals = pd.DataFrame(index=df.index)
+        signals['signal'] = 0
+        
+        # Calculate range boundaries
+        range_top = df['Resistance'] - 0.01 * df['Close']  # Slightly below resistance
+        range_bottom = df['Support'] + 0.01 * df['Close']  # Slightly above support
+        
+        # Buy near support when RSI is oversold
+        buy_condition = (df['Close'] <= range_bottom) & (df['RSI'] < 40) & (df['Volume_ratio'] > 1.1)
+        
+        # Sell near resistance when RSI is overbought
+        sell_condition = (df['Close'] >= range_top) & (df['RSI'] > 60)
+        
+        signals.loc[buy_condition, 'signal'] = 1
+        signals.loc[sell_condition, 'signal'] = -1
+        
+        return signals
+    
+    def vwap_trading_strategy(self, symbol):
+        """VWAP trading strategy - use Volume Weighted Average Price to guide buy/sell decisions"""
+        df = self.data[symbol].copy()
+        signals = pd.DataFrame(index=df.index)
+        signals['signal'] = 0
+        
+        # Buy when price is below VWAP and showing upward momentum
+        buy_condition = (df['Close'] < df['VWAP']) & (df['SMA_5'] > df['SMA_10']) & (df['Volume_ratio'] > 1.2) & (df['RSI'] < 70)
+        
+        # Sell when price is above VWAP and momentum is weakening
+        sell_condition = (df['Close'] > df['VWAP']) & (df['SMA_5'] < df['SMA_10']) | (df['RSI'] > 80)
+        
+        signals.loc[buy_condition, 'signal'] = 1
+        signals.loc[sell_condition, 'signal'] = -1
+        
+        return signals
+    
+    def news_based_trading_strategy(self, symbol):
+        """News-based trading strategy - incorporate trading decisions based on market sentiment indicators"""
+        df = self.data[symbol].copy()
+        signals = pd.DataFrame(index=df.index)
+        signals['signal'] = 0
+        
+        # Since we don't have real news data, we'll use volatility and volume spikes as proxies
+        # High volume + high volatility = potential news impact
+        
+        # Calculate volatility spike
+        volatility_spike = df['Volatility'] > df['Volatility'].rolling(window=20).mean() * 1.5
+        
+        # High volume + positive momentum = potential good news
+        good_news_proxy = volatility_spike & (df['Volume_ratio'] > 2.0) & (df['Price_momentum'] > 0.02)
+        
+        # High volume + negative momentum = potential bad news
+        bad_news_proxy = volatility_spike & (df['Volume_ratio'] > 2.0) & (df['Price_momentum'] < -0.02)
+        
+        # Buy on good news proxy with confirmation
+        buy_condition = good_news_proxy & (df['RSI'] < 75) & (df['MACD'] > df['MACD_signal'])
+        
+        # Sell on bad news proxy or when momentum fades
+        sell_condition = bad_news_proxy | (df['RSI'] > 85)
+        
+        signals.loc[buy_condition, 'signal'] = 1
+        signals.loc[sell_condition, 'signal'] = -1
+        
+        return signals
     
     def sector_rotation_strategy(self, symbol):
         """Sector rotation strategy using relative strength"""
@@ -386,7 +501,57 @@ class MultiSymbolDayTradingAlgo:
         return signals
     
     def combined_strategy(self, symbol):
-        """Combined strategy using multiple indicators"""
+        """Combined strategy using voting mechanism from all individual strategies"""
+        df = self.data[symbol].copy()
+        signals = pd.DataFrame(index=df.index)
+        signals['signal'] = 0
+        
+        # Get signals from all individual strategies
+        strategy_methods = [
+            self.mean_reversion_strategy,
+            self.momentum_strategy,
+            self.breakout_trading_strategy,
+            self.range_trading_strategy,
+            self.vwap_trading_strategy,
+            self.news_based_trading_strategy
+        ]
+        
+        # Collect votes from each strategy
+        votes = pd.DataFrame(index=df.index)
+        
+        for i, strategy_method in enumerate(strategy_methods):
+            try:
+                strategy_signals = strategy_method(symbol)
+                votes[f'strategy_{i}'] = strategy_signals['signal']
+            except Exception as e:
+                # If a strategy fails, fill with neutral votes (0)
+                votes[f'strategy_{i}'] = 0
+                print(f"Strategy {i} failed for {symbol}: {e}")
+        
+        # Implement majority voting
+        # Count buy votes (1), sell votes (-1), and hold votes (0)
+        buy_votes = (votes == 1).sum(axis=1)
+        sell_votes = (votes == -1).sum(axis=1)
+        hold_votes = (votes == 0).sum(axis=1)
+        
+        # Determine final signal based on majority vote
+        # Need more than 50% agreement for action
+        total_strategies = len(strategy_methods)
+        majority_threshold = total_strategies // 2
+        
+        # Buy when majority of strategies vote buy
+        buy_condition = buy_votes > majority_threshold
+        
+        # Sell when majority of strategies vote sell
+        sell_condition = sell_votes > majority_threshold
+        
+        signals.loc[buy_condition, 'signal'] = 1
+        signals.loc[sell_condition, 'signal'] = -1
+        
+        return signals
+    
+    def combined_strategy_legacy(self, symbol):
+        """Legacy combined strategy using score-based approach (kept for comparison)"""
         df = self.data[symbol].copy()
         signals = pd.DataFrame(index=df.index)
         signals['signal'] = 0
@@ -440,9 +605,14 @@ class MultiSymbolDayTradingAlgo:
             'mean_reversion': self.mean_reversion_strategy,
             'momentum': self.momentum_strategy,
             'combined': self.combined_strategy,
+            'combined_legacy': self.combined_strategy_legacy,
             'sector_rotation': self.sector_rotation_strategy,
             'pairs_trading': self.pairs_trading_strategy,
-            'multi_timeframe': self.multi_timeframe_strategy
+            'multi_timeframe': self.multi_timeframe_strategy,
+            'breakout': self.breakout_trading_strategy,
+            'range': self.range_trading_strategy,
+            'vwap': self.vwap_trading_strategy,
+            'news_based': self.news_based_trading_strategy
         }
         
         if strategy_name not in strategy_functions:
@@ -710,7 +880,7 @@ class MultiSymbolDayTradingAlgo:
     def run_all_strategies(self):
         """Run and compare all strategies"""
         strategies = ['mean_reversion', 'momentum', 'combined', 'sector_rotation', 
-                     'pairs_trading', 'multi_timeframe']
+                     'pairs_trading', 'multi_timeframe', 'breakout', 'range', 'vwap', 'news_based']
         results_summary = {}
         
         for strategy in strategies:
@@ -774,6 +944,158 @@ class MultiSymbolDayTradingAlgo:
         print("Symbol Summary:")
         print(summary_df)
         return summary_df
+    
+    def optimize_strategy_parameters(self, strategy_name, param_grid, metric='Total Return (%)'):
+        """
+        Optimize strategy parameters using grid search
+        
+        Args:
+            strategy_name: Name of the strategy to optimize
+            param_grid: Dictionary of parameter ranges to test
+            metric: Metric to optimize for
+        """
+        print(f"Optimizing {strategy_name} strategy parameters...")
+        
+        if not self.data:
+            print("No data available for optimization")
+            return None
+        
+        from itertools import product
+        
+        # Generate all parameter combinations
+        param_names = list(param_grid.keys())
+        param_values = list(param_grid.values())
+        param_combinations = list(product(*param_values))
+        
+        best_params = None
+        best_score = float('-inf')
+        results = []
+        
+        for params in param_combinations:
+            param_dict = dict(zip(param_names, params))
+            
+            try:
+                # Temporarily modify strategy parameters
+                original_params = self._get_strategy_params(strategy_name)
+                self._set_strategy_params(strategy_name, param_dict)
+                
+                # Run backtest
+                self.backtest_strategy(strategy_name)
+                metrics = self.calculate_metrics()
+                
+                if metrics and metric in metrics:
+                    score = metrics[metric]
+                    results.append({
+                        'params': param_dict,
+                        'score': score,
+                        'metrics': metrics
+                    })
+                    
+                    if score > best_score:
+                        best_score = score
+                        best_params = param_dict
+                
+                # Restore original parameters
+                self._set_strategy_params(strategy_name, original_params)
+                
+            except Exception as e:
+                print(f"Error testing parameters {param_dict}: {e}")
+                continue
+        
+        if best_params:
+            print(f"Best parameters for {strategy_name}: {best_params}")
+            print(f"Best {metric}: {best_score}")
+            
+            # Set best parameters
+            self._set_strategy_params(strategy_name, best_params)
+            
+            return {
+                'best_params': best_params,
+                'best_score': best_score,
+                'all_results': results
+            }
+        else:
+            print("No valid parameter combinations found")
+            return None
+    
+    def _get_strategy_params(self, strategy_name):
+        """Get current parameters for a strategy (placeholder for now)"""
+        # This would need to be implemented based on the specific strategy
+        # For now, return empty dict
+        return {}
+    
+    def _set_strategy_params(self, strategy_name, params):
+        """Set parameters for a strategy (placeholder for now)"""
+        # This would need to be implemented based on the specific strategy
+        # For now, do nothing
+        pass
+    
+    def validate_out_of_sample(self, strategy_name, train_ratio=0.7):
+        """
+        Validate strategy on out-of-sample data
+        
+        Args:
+            strategy_name: Name of the strategy to validate
+            train_ratio: Proportion of data to use for training
+        """
+        print(f"Validating {strategy_name} strategy with out-of-sample data...")
+        
+        if not self.data:
+            print("No data available for validation")
+            return None
+        
+        # Store original results
+        original_results = self.results.copy()
+        original_portfolio = self.portfolio_results
+        
+        validation_results = {}
+        
+        for symbol in self.data.keys():
+            df = self.data[symbol].copy()
+            
+            # Split data
+            split_idx = int(len(df) * train_ratio)
+            train_data = df.iloc[:split_idx]
+            test_data = df.iloc[split_idx:]
+            
+            # Train on in-sample data
+            self.data[symbol] = train_data
+            self.backtest_strategy(strategy_name)
+            train_metrics = self.calculate_metrics()
+            
+            # Test on out-of-sample data
+            self.data[symbol] = test_data
+            self.backtest_strategy(strategy_name)
+            test_metrics = self.calculate_metrics()
+            
+            # Restore original data
+            self.data[symbol] = df
+            
+            validation_results[symbol] = {
+                'train_metrics': train_metrics,
+                'test_metrics': test_metrics,
+                'train_period': f"{train_data.index[0]} to {train_data.index[-1]}",
+                'test_period': f"{test_data.index[0]} to {test_data.index[-1]}"
+            }
+        
+        # Restore original results
+        self.results = original_results
+        self.portfolio_results = original_portfolio
+        
+        # Print validation summary
+        print("\nOut-of-Sample Validation Results:")
+        print("=" * 50)
+        
+        for symbol, results in validation_results.items():
+            print(f"\n{symbol}:")
+            if results['train_metrics'] and results['test_metrics']:
+                train_return = results['train_metrics']['Total Return (%)']
+                test_return = results['test_metrics']['Total Return (%)']
+                print(f"  Train Return: {train_return}%")
+                print(f"  Test Return: {test_return}%")
+                print(f"  Performance Consistency: {'Good' if abs(train_return - test_return) < 10 else 'Poor'}")
+        
+        return validation_results
 
 # Example usage with rate limiting fixes
 if __name__ == "__main__":
