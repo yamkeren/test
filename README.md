@@ -1,6 +1,6 @@
-# Enhanced Day Trading Strategies Framework
+# Enhanced Day Trading Strategies Framework with IBKR Integration
 
-A comprehensive multi-symbol day trading algorithm framework with advanced backtesting capabilities, multiple trading strategies, and a sophisticated voting mechanism for decision-making.
+A comprehensive multi-symbol day trading algorithm framework with advanced backtesting capabilities, multiple trading strategies, Interactive Brokers integration, and real-time trading capabilities.
 
 ## 🚀 Features
 
@@ -24,8 +24,18 @@ A comprehensive multi-symbol day trading algorithm framework with advanced backt
 - 📈 **Comprehensive Metrics**: Sharpe ratio, drawdown, win rate, etc.
 - 🎯 **Multi-Symbol Support**: Trade multiple assets simultaneously
 
+### 🆕 Interactive Brokers Integration
+- **Real-Time Data**: Live market data streaming
+- **Trade Execution**: Market and limit orders
+- **Portfolio Management**: Real-time position tracking
+- **Account Management**: Account summary and balances
+- **Risk Management**: Position sizing and loss limits
+- **Paper Trading**: Safe testing environment
+- **Secure Configuration**: Encrypted credential storage
+
 ## 📋 Quick Start
 
+### Basic Usage (Backtesting)
 ```python
 from script import MultiSymbolDayTradingAlgo
 
@@ -46,10 +56,73 @@ comparison = trader.run_all_strategies()
 print(comparison)
 ```
 
+### Enhanced Usage with IBKR Integration
+```python
+from enhanced_trading import create_enhanced_trader
+
+# Create enhanced trader with IBKR support
+trader = create_enhanced_trader(['AAPL', 'MSFT'], use_ibkr=True, initial_capital=50000)
+
+# Connect to Interactive Brokers (requires TWS/IB Gateway)
+if trader.connect_ibkr():
+    # Get real-time market data
+    market_data = trader.get_live_market_data('AAPL')
+    print(f"AAPL Price: ${market_data['price']}")
+    
+    # Execute a trade
+    result = trader.execute_trade('AAPL', 100, 'market')  # Buy 100 shares
+    if result.success:
+        print(f"Trade executed: {result.filled_qty} shares at ${result.avg_price}")
+    
+    # Get portfolio summary
+    portfolio = trader.get_portfolio_summary()
+    print(f"Account Value: ${portfolio['account_value']:,.2f}")
+    
+    # Start live trading (optional)
+    # trader.start_live_trading('combined')
+```
+
 ## 🔧 Installation
 
+### Basic Installation
 ```bash
 pip install yfinance pandas numpy matplotlib seaborn
+```
+
+### With Interactive Brokers Support
+```bash
+pip install yfinance pandas numpy matplotlib seaborn ib_insync
+```
+
+### IBKR Setup
+1. **Install TWS or IB Gateway**: Download from Interactive Brokers
+2. **Configure API**: Enable API access in TWS/IB Gateway settings
+3. **Paper Trading**: Use port 7497 for paper trading, 7496 for live
+4. **Configure Framework**: Set up credentials using environment variables
+
+```bash
+# Copy sample configuration
+cp .env.sample .env
+
+# Edit configuration
+nano .env
+```
+
+### Environment Variables
+```bash
+# IBKR Configuration
+IBKR_HOST=127.0.0.1
+IBKR_PORT=7497                 # 7497 for paper trading, 7496 for live
+IBKR_CLIENT_ID=1
+IBKR_PAPER_TRADING=True        # IMPORTANT: Set to False for live trading
+IBKR_TIMEOUT=30
+
+# Trading Configuration
+TRADING_INITIAL_CAPITAL=50000.0
+TRADING_MAX_POSITION_SIZE=0.1  # 10% of portfolio per position
+TRADING_STOP_LOSS_PCT=0.05     # 5% stop loss
+TRADING_TAKE_PROFIT_PCT=0.10   # 10% take profit
+TRADING_MAX_DAILY_LOSS=0.02    # 2% max daily loss
 ```
 
 ## 📊 Performance Metrics
@@ -64,9 +137,19 @@ The framework provides comprehensive performance analysis:
 
 ## 🧪 Testing
 
-Run comprehensive tests:
+### Run Basic Tests
 ```bash
 python test_enhancements.py
+```
+
+### Run IBKR Integration Tests
+```bash
+python test_ibkr_integration.py
+```
+
+### Run Demo
+```bash
+python demo_ibkr_integration.py
 ```
 
 ## 📚 Documentation
@@ -75,12 +158,23 @@ See [DOCUMENTATION.md](DOCUMENTATION.md) for detailed usage instructions, strate
 
 ## 🎯 New in This Version
 
+### IBKR Integration Features
+- ✅ **Real-Time Data**: Live market data streaming from Interactive Brokers
+- ✅ **Trade Execution**: Market and limit order execution
+- ✅ **Portfolio Management**: Real-time position and account tracking
+- ✅ **Risk Management**: Position sizing and daily loss limits
+- ✅ **Configuration Management**: Secure credential storage
+- ✅ **Paper Trading**: Safe testing environment
+
+### Enhanced Trading Features
 - ✅ 4 new trading strategies (Breakout, Range, VWAP, News-Based)
 - ✅ Voting mechanism for combined strategy
 - ✅ Parameter optimization framework
 - ✅ Out-of-sample validation
 - ✅ Enhanced technical indicators (VWAP, ATR, Support/Resistance)
 - ✅ Comprehensive test suite
+- ✅ Real-time trading capabilities
+- ✅ Portfolio dashboard and reporting
 
 ## 📈 Example Results
 
